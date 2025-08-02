@@ -32,7 +32,7 @@ class RegisterRequest extends FormRequest
             'password'   => ['required', 'string', 'min:8', 'confirmed:confirmed'],
 			'notional_code'  => ['required', new CheckeNationalCode()],
 			'city_id'  => ['required', 'exists:cities,id'],
-			'zip_code'  => ['required', 'regex:/(?!(\d)\1{3})[13-9]{4}[1346-9][013-9]{5}/'],
+			// 'zip_code'  => ['required', 'regex:/(?!(\d)\1{3})[13-9]{4}[1346-9][013-9]{5}/'],
 			'address'  => ['required', 'string'],
             'captcha'    => ['required', 'captcha'],
         ];

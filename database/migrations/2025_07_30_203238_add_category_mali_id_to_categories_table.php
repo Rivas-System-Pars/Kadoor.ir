@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddTelephoneColumnToOrdersTable extends Migration
+class AddCategoryMaliIdToCategoriesTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,8 +13,8 @@ class AddTelephoneColumnToOrdersTable extends Migration
      */
     public function up()
     {
-        Schema::table('orders', function (Blueprint $table) {
-            $table->string('telephone')->nullable();
+        Schema::table('categories', function (Blueprint $table) {
+            $table->string('category_mali_id')->nullable();
         });
     }
 
@@ -25,8 +25,8 @@ class AddTelephoneColumnToOrdersTable extends Migration
      */
     public function down()
     {
-        Schema::table('orders', function (Blueprint $table) {
-            $table->dropColumn('telephone');
+        Schema::table('categories', function (Blueprint $table) {
+            $table->dropColumn('category_mali_id');
         });
     }
 }

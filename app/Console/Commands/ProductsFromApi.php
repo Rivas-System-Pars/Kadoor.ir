@@ -48,7 +48,7 @@ class ProductsFromApi extends Command
         try {
             $res = Http::withHeaders([
                 'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde'
-            ])->get('https://webcomapi.ir/api/Store/StartData');
+            ])->get('http://visitorykadoor.ir/Get_Holoo_Articles?per_page=10000');
             $products = Arr::get($res->json(), 'article', []);
             $categories = Arr::get($res->json(), 'sGroup', []);
 
@@ -59,7 +59,7 @@ class ProductsFromApi extends Command
                     foreach ($products as $productItem) {
                         /** @var Product $product */
                         $product = ProductController::create_product($productItem, in_array($productItem['fldC_Kala'], Product::all()->pluck('code')->toArray()));
-                        
+
 						if($productItem['fldShow'] == "true" && !$product->show){
 							$product_show_ids[]=$product->id;
 						}else if($productItem['fldShow'] != "true" && $product->show){

@@ -27,9 +27,10 @@ class RegisteredUserController extends Controller
         if (!$view) {
             abort(404);
         }
-		$provinces = Province::active()->orderBy('ordering')->get();
+        $provinces = Province::active()->orderBy('ordering')->get();
 
-        return view($view,compact('provinces'));    }
+        return view($view, compact('provinces'));
+    }
 
     /**
      * Handle an incoming registration request.
@@ -41,31 +42,31 @@ class RegisteredUserController extends Controller
      */
     public function store(RegisterRequest $request)
     {
-				
+        // dd('a');
 
         $data             = $request->validated();
         $data['password'] = Hash::make($data['password']);
-		$data['mobile'] = $data['username'];
-		$data['notional_code'] = $data['notional_code'];
-		$data['city_id'] = $data['city_id'];
-		$data['zip_code'] = $data['zip_code'];
-		$data['address_txt'] = $data['address'];
+        $data['mobile'] = $data['username'];
+        $data['notional_code'] = $data['notional_code'];
+        $data['city_id'] = $data['city_id'];
+        // $data['zip_code'] = $data['zip_code'];
+        $data['address_txt'] = $data['address'];
         $user = User::create($data);
-		$city = City::find($request->city_id);
-		Http::withHeaders([
-                'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde'
-            ])->asForm()->post('https://webcomapi.ir/api/Store/RegisterUser2',[
-				'phoneNumber'=>$request->username,
-				'address'	=>	$request->address,
-				'NationalCode'=>$request->national_code,
-				'PostCode'	=>	$request->zip_code,
-				'fullName'=>$request->first_name." ".$request->last_name,
-				//'Tel'=>$request->mobile,
-				'State'=>$city->province->name,
-				'City'=>$city->name,
-				//'Area'=>$request->address
-			]);
+        $city = City::find($request->city_id);
+        $a = Http::withHeaders(headers: [
+            'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde'
+        ])->asJson()
+            ->withOptions(['verify' => false])
+            ->post('http://visitorykadoor.ir/register', [
+                'phoneNumber' => $request->username,
+                'fullName' => $request->first_name . " " . $request->last_name,
+                // 'address' => $request->address,
+                'nationalCode' => $request->national_code,
+                'region' => $city->province->name,
+                'city' => $city->name,
+            ]);
 
+        // dd($a);
         // $curl = curl_init();
         // curl_setopt_array($curl, array(
         //     CURLOPT_URL => 'https://webcomapi.ir/api/Store/RegisterUser',

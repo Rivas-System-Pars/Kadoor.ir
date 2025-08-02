@@ -60,7 +60,7 @@ class OrderController extends Controller
             return redirect()->route('front.checkout');
         }
 
-//        $gateway  = Gateway::where('key', $request->gateway)->first();
+        //        $gateway  = Gateway::where('key', $request->gateway)->first();
         $data     = $request->validated();
 
         $data['shipping_cost']      = $cart->shippingCostAmount($request->city_id, $request->carrier_id);
@@ -69,122 +69,202 @@ class OrderController extends Controller
         $data['discount_amount']    = $cart->totalDiscount();
         $data['discount_id']        = $cart->discount_id;
         $data['user_id']            = $user->id;
-		$data['postal_code']            = $request->postal_code;
-		$data['national_code']            = $request->national_code;
+        $data['postal_code']            = $request->postal_code;
+        $data['national_code']            = $request->national_code;
 
-//        if ($gateway) {
-//            $data['gateway_id']         = $gateway->id;
-//        }
+        //        if ($gateway) {
+        //            $data['gateway_id']         = $gateway->id;
+        //        }
 
-//        $carrier_result = $cart->canUseCarrier($request->carrier_id, $request->city_id);
+        //        $carrier_result = $cart->canUseCarrier($request->carrier_id, $request->city_id);
 
-//        if ($cart->hasPhysicalProduct() && !$carrier_result['status']) {
-//            return redirect()->back()->withInput()->withErrors([
-//                'carrier_id' => $carrier_result['message'],
-//            ]);
-//        }
+        //        if ($cart->hasPhysicalProduct() && !$carrier_result['status']) {
+        //            return redirect()->back()->withInput()->withErrors([
+        //                'carrier_id' => $carrier_result['message'],
+        //            ]);
+        //        }
 
-		
+
         $order = Order::create($data);
 
-        //add cart products to order
-		$api_data=[];
-		$api_data['orderVal.OrderTitle.FldMobile']=$order->mobile;
-		$api_data['orderVal.OrderTitle.FldTotalFaktor']=$order->price;
-		$api_data['orderVal.OrderTitle.FldTakhfifVizhe']='0';
-		$api_data['orderVal.OrderTitle.FldTozihFaktor']='خرید';
-		$api_data['orderVal.OrderTitle.FldAddress']=auth()->user()->address;
-		$api_data['orderVal.OrderTitle.FldPayId']='0';
-		$i=0;
+        // آماده‌سازی داده برای API جدید
+        $orderData = [
+            "OrderTitle" => [
+                "FldMobile"       => $order->mobile,
+                "FldPayId"        => "1",
+                "FldTozihFaktor"  => "سفارش از سایت",
+                "FldTotalFaktor"  => $order->price,
+            ],
+            "OrderDetails" => [],
+        ];
+
+        // اضافه‌کردن محصولات به OrderDetails
         foreach ($cart->products as $product) {
-
             $price = $product->prices()->find($product->pivot->price_id);
+            if (!$price) continue;
 
-            if ($price) {
-                $curl = curl_init();
-                curl_setopt_array($curl, array(
-                    CURLOPT_URL => 'https://webcomapi.ir/api/Store/GetArticleByCode',
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_ENCODING => '',
-                    CURLOPT_MAXREDIRS => 10,
-                    CURLOPT_TIMEOUT => 0,
-                    CURLOPT_FOLLOWLOCATION => true,
-                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                    CURLOPT_CUSTOMREQUEST => 'POST',
-                    CURLOPT_POSTFIELDS => array('articleCode' => $product->code),
-                    CURLOPT_HTTPHEADER => array(
-                        'apiKey: 7a2a1be2*d422*4d70*8b61*affdde'
-                    ),
-                ));
-                $response = curl_exec($curl);
-                curl_close($curl);
-				
+            // دریافت اطلاعات محصول از API
+            // $res = Http::withHeaders([
+            //     'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
+            // ])->asForm()->post('https://webcomapi.ir/api/Store/GetArticleByCode', [
+            //     'articleCode' => $product->code
+            // ]);
 
-                $article = json_decode($response)->article;
-				if($article){
-					$api_data['orderVal.OrderDetails['.$i.'].FldC_Kala']=$article->fldC_Kala;
-					$api_data['orderVal.OrderDetails['.$i.'].FldN_Kala']=$article->fldN_Kala;
-					$api_data['orderVal.OrderDetails['.$i.'].FldFee']=$article->fldFee;
-					$api_data['orderVal.OrderDetails['.$i.'].FldFeeBadAzTakhfif']=$article->fldFeeBadAzTakhfif;
-					$api_data['orderVal.OrderDetails['.$i.'].FldN_Vahed']='عدد';
-					$api_data['orderVal.OrderDetails['.$i.'].FldN_Vahed_Kol']='';
-					$api_data['orderVal.OrderDetails['.$i.'].FldTedad']=$product->pivot->quantity;
-					$api_data['orderVal.OrderDetails['.$i.'].FldTedadKol']='0';
-					$api_data['orderVal.OrderDetails['.$i.'].FldTedadDarKarton']='0';
-					$api_data['orderVal.OrderDetails['.$i.'].FldTozihat']=$order->province .' '.$order->city.' '.$order->address;
-					$api_data['orderVal.OrderDetails['.$i.'].FldACode_C']=$article->fldACode_C;
-				}
-                $order->items()->create([
-                    'product_id'      => $product->id,
-                    'title'           => $product->title,
-                    'price'           => $price->discountPrice(),
-                    'real_price'      => $price->tomanPrice(),
-                    'quantity'        => $product->pivot->quantity,
-                    'discount'        => $price->discount,
-                    'price_id'        => $product->pivot->price_id,
-                    'code'            => array_key_exists('orderId',json_decode($response,true)) ? json_decode($response,true)['orderId'] : null
-                ]);
-				$i++;
+            $res = Http::withHeaders([
+                'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
+            ])->asJson()->post('http://visitorykadoor.ir/products_information', [
+                'a_code' => $product->code,
+            ]);
+
+            $article = $res->json()['article'] ?? null;
+            if (!$article) continue;
+
+            $orderData["OrderDetails"][] = [
+                "FldC_Kala"     => $article['fldC_Kala'],
+                "FldACode_C"    => $article['fldACode_C'],
+                "FldN_Kala"     => $article['fldN_Kala'],
+                "FldTedad"      => $product->pivot->quantity,
+                "FldFee"        => $article['fldFeeBadAzTakhfif'] ?? $article['fldFee'],
+                "FldN_Vahed"    => "عدد",
+                "FldTozihat"    => $order->province . ' ' . $order->city . ' ' . $order->address,
+            ];
+
+            // ثبت آیتم در دیتابیس
+            $order->items()->create([
+                'product_id' => $product->id,
+                'title' => $product->title,
+                'price' => $price->discountPrice(),
+                'real_price' => $price->tomanPrice(),
+                'quantity' => $product->pivot->quantity,
+                'discount' => $price->discount,
+                'price_id' => $product->pivot->price_id,
+                'code' => $article['fldC_Kala'],
+            ]);
+        }
+
+        // ارسال نهایی به API جدید
+        $response = Http::withHeaders([
+            'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde'
+        ])->post('http://visitorykadoor.ir/save', $orderData);
+
+        // بررسی نتیجه
+        if ($response->successful()) {
+            $result = $response->json();
+            $orderIdFromApi = $result['orderId'] ?? null;
+
+            if ($orderIdFromApi) {
+                $order->items()->update(['code' => $orderIdFromApi]);
             }
         }
-		$registerUserResponse = Http::withHeaders([
-            'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde'
-        ])->asForm()->post('https://webcomapi.ir/api/Store/RegisterUser2', [
-            'fullName' => $user->first_name." ".$user->last_name,
-            'address' => $order->address,
-			'state'=>$order->province->name,
-			'city'=>$order->city->name,
-			'phoneNumber' => strlen(trim($user->mobile)) ? trim($user->mobile) : $user->username,
-			'NationalCode' => $user->notional_code,
-            'createDate' => time()
-        ]);
-		if($registerUserResponse->successful()){
-			$curl = curl_init();
-			curl_setopt_array($curl, array(
-				CURLOPT_URL => 'https://webcomapi.ir/api/Order/Order',
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_ENCODING => '',
-				CURLOPT_MAXREDIRS => 10,
-				CURLOPT_TIMEOUT => 0,
-				CURLOPT_FOLLOWLOCATION => true,
-				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-				CURLOPT_CUSTOMREQUEST => 'POST',
-				CURLOPT_POSTFIELDS => $api_data, // Article Manual Code
-				CURLOPT_HTTPHEADER => array(
-					'apiKey: 7a2a1be2*d422*4d70*8b61*affdde'
-				),
-			));
-			$response = curl_exec($curl);
-			curl_close($curl);
-			$order->items()->update(['code'=>json_decode($response,true)['orderId']]);
-		}
+
+
+        //add cart products to order
+        // $api_data = [];
+        // $api_data['orderVal.OrderTitle.FldMobile'] = $order->mobile;
+        // $api_data['orderVal.OrderTitle.FldTotalFaktor'] = $order->price;
+        // $api_data['orderVal.OrderTitle.FldTakhfifVizhe'] = '0';
+        // $api_data['orderVal.OrderTitle.FldTozihFaktor'] = 'خرید';
+        // $api_data['orderVal.OrderTitle.FldAddress'] = auth()->user()->address;
+        // $api_data['orderVal.OrderTitle.FldPayId'] = '0';
+        // $i = 0;
+        // foreach ($cart->products as $product) {
+
+        //     $price = $product->prices()->find($product->pivot->price_id);
+
+        //     if ($price) {
+        // $curl = curl_init();
+        // curl_setopt_array($curl, array(
+        //     CURLOPT_URL => 'http://visitorykadoor.ir/products_information',
+        //     CURLOPT_RETURNTRANSFER => true,
+        //     CURLOPT_ENCODING => '',
+        //     CURLOPT_MAXREDIRS => 10,
+        //     CURLOPT_TIMEOUT => 0,
+        //     CURLOPT_FOLLOWLOCATION => true,
+        //     CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        //     CURLOPT_CUSTOMREQUEST => 'POST',
+        //     CURLOPT_POSTFIELDS => array('a_code' => $product->code),
+        //     CURLOPT_HTTPHEADER => array(
+        //         'apiKey: 7a2a1be2*d422*4d70*8b61*affdde'
+        //     ),
+        // ));
+        // $response = curl_exec($curl);
+        // curl_close($curl);
+
+        // $response = Http::withHeaders([
+        //     'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
+        // ])->asJson()->post('http://visitorykadoor.ir/products_information', [
+        //     'a_code' => $product->code,
+        // ]);
+
+
+
+        // $article = json_decode($response);
+        // if ($article) {
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldC_Kala'] = $article->A_Code;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldN_Kala'] = $article->A_Name;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldFee'] = $article->Buy_Price;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldFeeBadAzTakhfif'] = $article->EndBuy_Price;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldN_Vahed'] = $article->FldN_Vahed;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldN_Vahed_Kol'] = '';
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldTedad'] = $product->pivot->quantity;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldTedadKol'] = '0';
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldTedadDarKarton'] = '0';
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldTozihat'] = $order->province . ' ' . $order->city . ' ' . $order->address;
+        //     $api_data['orderVal.OrderDetails[' . $i . '].FldACode_C'] = $article->A_Code_c;
+        // }
+        // $order->items()->create([
+        //     'product_id'      => $product->id,
+        //     'title'           => $product->title,
+        //     'price'           => $price->discountPrice(),
+        //     'real_price'      => $price->tomanPrice(),
+        //     'quantity'        => $product->pivot->quantity,
+        //     'discount'        => $price->discount,
+        //     'price_id'        => $product->pivot->price_id,
+        //     'code'            => array_key_exists('orderId', json_decode($response, true)) ? json_decode($response, true)['orderId'] : null
+        // ]);
+        // $i++;
+        // }
+        // }
+        // $registerUserResponse = Http::withHeaders([
+        //     'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde'
+        // ])->asForm()->post('https://webcomapi.ir/api/Store/RegisterUser2', [
+        //     'fullName' => $user->first_name . " " . $user->last_name,
+        //     'address' => $order->address,
+        //     'state' => $order->province->name,
+        //     'city' => $order->city->name,
+        //     'phoneNumber' => strlen(trim($user->mobile)) ? trim($user->mobile) : $user->username,
+        //     'NationalCode' => $user->notional_code,
+        //     'createDate' => time()
+        // ]);
+        // if ($registerUserResponse->successful()) {
+        // $curl = curl_init();
+        // curl_setopt_array($curl, array(
+        //     CURLOPT_URL => 'https://webcomapi.ir/api/Order/Order',
+        //     CURLOPT_RETURNTRANSFER => true,
+        //     CURLOPT_ENCODING => '',
+        //     CURLOPT_MAXREDIRS => 10,
+        //     CURLOPT_TIMEOUT => 0,
+        //     CURLOPT_FOLLOWLOCATION => true,
+        //     CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        //     CURLOPT_CUSTOMREQUEST => 'POST',
+        //     CURLOPT_POSTFIELDS => $api_data, // Article Manual Code
+        //     CURLOPT_HTTPHEADER => array(
+        //         'apiKey: 7a2a1be2*d422*4d70*8b61*affdde'
+        //     ),
+        // ));
+        // $response = curl_exec($curl);
+        // curl_close($curl);
+
+
+        // $order->items()->update(['code' => json_decode($response, true)['orderId']]);
+        // }
 
         $cart->delete();
         event(new OrderPaid($order));
         return redirect()->route('front.orders.show', ['order' => $order])->with('message', 'ok');
     }
-	/*
-	
+    /*
+
 	array(
 //                        'orderVal.OrderTitle.FldMobile' => auth()->user()->username, // User Number
                         'orderVal.OrderTitle.FldMobile' => $order->mobile, // User Number
@@ -204,7 +284,7 @@ class OrderController extends Controller
                         'orderVal.OrderDetails[0].FldTedadDarKarton' => '0', // InPack Count
                         'orderVal.OrderDetails[0].FldTozihat' => $order->province .' '.$order->city.' '.$order->address, // Order Comment
                         'orderVal.OrderDetails[0].FldACode_C' => $article->fldACode_C)
-	
+
 	*/
 
     public function pay(Order $order, Request $request)
