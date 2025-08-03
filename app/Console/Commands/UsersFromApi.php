@@ -41,43 +41,59 @@ class UsersFromApi extends Command
     public function handle()
     {
         try {
-			DB::transaction(function (){
-				$users = collect([]);
-				$response = Http::withHeaders([
-					'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
-				])->asForm()->post('https://webcomapi.ir/api/Store/GetUsers', [
-					'Page' => 1,
-				])->json();
-				$users->push($response['users']);
-				if (array_key_exists('countUsers', $response) && $response['countUsers'] > 100) {
-					foreach (range(2, ceil($response['countUsers'] / 100)) as $i) {
-						$users->push(Http::withHeaders([
-							'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
-						])->asForm()->post('https://webcomapi.ir/api/Store/GetUsers', [
-							'Page' => $i,
-						])->json()['users']);
-					}
-				}
-				$users = $users->flatten(1)->whereNotIn('fldMob',User::query()->whereNotNull('mobile')->pluck('mobile')->filter()->toArray());
-				if($users->count()){
-					foreach ($users as $userItem) {
-						DB::table('users')->updateOrInsert([
-							'mobile' => $userItem['fldMob'],
-						], [
-							'u_id' => $userItem['fldId'],
-							'first_name' => $userItem['fldName'],
-							'last_name' => $userItem['fldName'],
-							'mobile' => $userItem['fldMob'],
-							'username' => $userItem['fldMob'],
-							'level' => 'user',
-							'password' => bcrypt($userItem['fldMob']),
-						]);
-					}
-				}
-			});
+            DB::transaction(function () {
+                $baseUrl = 'http://visitorykadoor.ir/send_customers_Visitory';
+                $res = Http::withHeaders([
+                    'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
+                ])->asJson()->get($baseUrl);
+
+                $firstJson = $res->json();
+                $totalPages = $firstJson['pagination']['total_pages'] ?? 1;
+
+                $allCustomers = collect();
+
+                foreach (range(1, $totalPages) as $page) {
+                    $response = Http::withHeaders([
+                        'apiKey' => '7a2a1be2*d422*4d70*8b61*affdde',
+                    ])->asJson()->get("$baseUrl?page=$page");
+
+                    $json = $response->json();
+                    $customers = $json['customers'] ?? [];
+
+                    if (!empty($customers)) {
+                        $allCustomers = $allCustomers->merge($customers);
+                    }
+                }
+
+                $customersWithMobile = $allCustomers->filter(function ($item) {
+                    return !empty($item['FldMob']) && is_string($item['FldMob']);
+                })->values();
+
+                $count = 0;
+
+                foreach ($customersWithMobile as $item) {
+                    $created = User::updateOrCreate(
+                        ['username' => $item['FldMob']],
+                        [
+                            'u_id' => $item['FldC_Ashkhas'],
+                            'first_name' => $item['FldN_Ashkhas'],
+                            'last_name' => $item['FldN_Ashkhas'],
+                            'mobile' => $item['FldMob'],
+                            'level' => 'user',
+                            'password' => bcrypt($item['FldMob']),
+                            'address_txt' => $item['FldAddress'] ?? null,
+                        ]
+                    );
+                    $count++;
+                }
+
+                $this->info("✅ Synced {$count} users with mobile.");
+            });
         } catch (\Throwable $e) {
             logger($e);
+            $this->error('خطا در دریافت یا ذخیره کاربران: ' . $e->getMessage());
         }
+
         return 0;
     }
 }
